@@ -1,11 +1,18 @@
 import os
-
+import csv
+import tempfile
+from pathlib import Path
 import requests
+import time
 
-def main():
-    get_data()
+COURSE_ID = 36387
+PAGE_SIZE = 30
+PAGE_COUNT = 3
+CSV_PATH = Path(__file__).with_name('threads.csv')
 
-def get_data():
+
+
+def get_data(offset):
     api_token = os.getenv('ED_API_TOKEN')
     if not api_token:
         raise RuntimeError('请先设置 ED_API_TOKEN 环境变量，再运行脚本。')
@@ -15,39 +22,85 @@ def get_data():
         'Authorization': f'Bearer {api_token}',
     }
     params = {
-        'limit': 30,
-        'offset': 0,
-        'sort': "new",
+        'limit': PAGE_SIZE,
+        'offset': offset,
+        'sort': 'new',
     }
-    url = 'https://edstem.org/api/courses/36387/threads'
+    url = f'https://edstem.org/api/courses/{COURSE_ID}/threads'
     response = requests.get(url=url, headers=headers, params=params, timeout=20)
     response.raise_for_status()
-    res = response.json()
-    items = res['threads']
-    # loop through every threads
-    for item in items:
-        type = item['type']     # string
-        title = item['title']    # string
-        document = item['document']     #string
-        category = item['category']     # string
-        subcategory = item['subcategory']       # string
-        view_count = item['view_count']     # int
-        vote_count = item['vote_count']     # int
-        reply_count = item['reply_count']   # int
-        is_answered = item['is_answered']   # boolean
-        created_time = item['created_at']   # time
-        updated_time = item['updated_at']   # time
-        tid = item['id']
-        detail_url = f'https://edstem.org/au/courses/36387/discussion/{tid}'
-        print(title, subcategory, view_count)
+    threads = response.json()['threads']
+    if not isinstance(threads, list):
+        raise ValueError('Ed API 返回的 threads 不是列表。')
+    return threads
 
-def init_csv():
-    pass
 
-def save_csv():
-    pass
+def init_csv(writer):
+    writer.writerow([
+        'Thread id', 'Thread type', 'Thread title', 'Thread content',
+        'Thread category', 'Thread subcategory', 'View count', 'Like count',
+        'Star count', 'Reply number', 'Is answer resolved',
+        'Thread time', 'Updated time', 'Thread url',
+    ])
+
+def save_csv(all_threads):
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode='w', encoding='utf-8', newline='',
+            dir=CSV_PATH.parent, prefix='threads-', suffix='.tmp', delete=False,
+        ) as file:
+            temporary_path = Path(file.name)
+            writer = csv.writer(file)
+            init_csv(writer)
+            for item in all_threads:
+                writer.writerow([
+                    item['id'],
+                    item.get('type', ''),
+                    item.get('title', ''),
+                    item.get('document', ''),
+                    item.get('category', ''),
+                    item.get('subcategory', ''),
+                    item.get('view_count', 0),
+                    item.get('vote_count', 0),
+                    item.get('star_count', 0),
+                    item.get('reply_count', 0),
+                    item.get('is_answered', False),
+                    item.get('created_at', ''),
+                    item.get('updated_at', ''),
+                    f'https://edstem.org/au/courses/{COURSE_ID}/discussion/{item["id"]}',
+                ])
+        os.replace(temporary_path, CSV_PATH)
+    finally:
+        if temporary_path is not None and temporary_path.exists():
+            temporary_path.unlink()
+
+
+def main():
+    all_threads = []
+    seen_ids = set()
+    for page in range(PAGE_COUNT):
+        offset = page * PAGE_SIZE
+        items = get_data(offset)
+        print(f'第 {page + 1} 页：返回 {len(items)} 条帖子')
+        if not items:
+            break
+
+        for item in items:
+            if item['id'] not in seen_ids:
+                seen_ids.add(item['id'])
+                all_threads.append(item)
+
+        if page + 1 < PAGE_COUNT:
+            time.sleep(1)
+
+    if not all_threads:
+        print('没有取得帖子，现有 CSV 未改动。')
+        return
+
+    save_csv(all_threads)
+    print(f'已保存 {len(all_threads)} 条帖子到 {CSV_PATH}')
 
 
 if __name__ == '__main__':
     main()
-
