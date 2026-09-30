@@ -15,7 +15,7 @@ CSV_PATH = Path(__file__).with_name('threads.csv')
 def get_data(offset):
     api_token = os.getenv('ED_API_TOKEN')
     if not api_token:
-        raise RuntimeError('请先设置 ED_API_TOKEN 环境变量，再运行脚本。')
+        raise RuntimeError('Set the ED_API_TOKEN environment variable before running the script.')
 
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36',
@@ -31,7 +31,7 @@ def get_data(offset):
     response.raise_for_status()
     threads = response.json()['threads']
     if not isinstance(threads, list):
-        raise ValueError('Ed API 返回的 threads 不是列表。')
+        raise ValueError('The Ed API response does not contain a list of threads.')
     return threads
 
 
@@ -82,7 +82,7 @@ def main():
     for page in range(PAGE_COUNT):
         offset = page * PAGE_SIZE
         items = get_data(offset)
-        print(f'第 {page + 1} 页：返回 {len(items)} 条帖子')
+        print(f'Page {page + 1}: received {len(items)} threads')
         if not items:
             break
 
@@ -95,11 +95,11 @@ def main():
             time.sleep(1)
 
     if not all_threads:
-        print('没有取得帖子，现有 CSV 未改动。')
+        print('No threads were retrieved. The existing CSV was not changed.')
         return
 
     save_csv(all_threads)
-    print(f'已保存 {len(all_threads)} 条帖子到 {CSV_PATH}')
+    print(f'Saved {len(all_threads)} threads to {CSV_PATH}')
 
 
 if __name__ == '__main__':
