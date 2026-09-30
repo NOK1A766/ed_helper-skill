@@ -72,7 +72,6 @@ def save_csv(all_threads, path=CSV_PATH):
 
 def main():
     all_threads = []
-    seen_ids = set()
     page = 0
     while True:
         offset = page * PAGE_SIZE
@@ -81,14 +80,7 @@ def main():
         if not items:
             break
 
-        added = 0
-        for item in items:
-            if item['id'] not in seen_ids:
-                seen_ids.add(item['id'])
-                all_threads.append(item)
-                added += 1
-        if added == 0:
-            raise RuntimeError('The API returned a duplicate page; stopping the crawl.')
+        all_threads.extend(items)
         if len(items) < PAGE_SIZE:
             break
 
