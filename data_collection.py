@@ -1,15 +1,14 @@
 import os
 import csv
-import tempfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import requests
 import time
 
 COURSE_ID = 36387
 PAGE_SIZE = 30
-PAGE_COUNT = 3
+FILTER_DAYS = (7, 14, 30)
 CSV_PATH = Path(__file__).with_name('threads.csv')
-
 
 
 def get_data(offset):
@@ -43,56 +42,58 @@ def init_csv(writer):
         'Thread time', 'Updated time', 'Thread url',
     ])
 
-def save_csv(all_threads):
-    temporary_path = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode='w', encoding='utf-8', newline='',
-            dir=CSV_PATH.parent, prefix='threads-', suffix='.tmp', delete=False,
-        ) as file:
-            temporary_path = Path(file.name)
-            writer = csv.writer(file)
-            init_csv(writer)
-            for item in all_threads:
-                writer.writerow([
-                    item['id'],
-                    item.get('type', ''),
-                    item.get('title', ''),
-                    item.get('document', ''),
-                    item.get('category', ''),
-                    item.get('subcategory', ''),
-                    item.get('view_count', 0),
-                    item.get('vote_count', 0),
-                    item.get('star_count', 0),
-                    item.get('reply_count', 0),
-                    item.get('is_answered', False),
-                    item.get('created_at', ''),
-                    item.get('updated_at', ''),
-                    f'https://edstem.org/au/courses/{COURSE_ID}/discussion/{item["id"]}',
-                ])
-        os.replace(temporary_path, CSV_PATH)
-    finally:
-        if temporary_path is not None and temporary_path.exists():
-            temporary_path.unlink()
+
+def save_csv(all_threads, path=CSV_PATH):
+    with open(path, 'w', encoding='utf-8', newline='') as file:
+        writer = csv.writer(file)
+        init_csv(writer)
+        for item in all_threads:
+            tid = item['id']
+            thread_type = item.get('type', '')
+            title = item.get('title', '')
+            document = item.get('document', '')
+            category = item.get('category', '')
+            subcategory = item.get('subcategory', '')
+            view_count = item.get('view_count', 0)
+            vote_count = item.get('vote_count', 0)
+            star_count = item.get('star_count', 0)
+            reply_count = item.get('reply_count', 0)
+            is_answered = item.get('is_answered', False)
+            created_time = item.get('created_at', '')
+            updated_time = item.get('updated_at', '')
+            detail_url = f'https://edstem.org/au/courses/{COURSE_ID}/discussion/{tid}'
+
+            writer.writerow([
+                tid, thread_type, title, document, category, subcategory,
+                view_count, vote_count, star_count, reply_count, is_answered,
+                created_time, updated_time, detail_url,
+            ])
 
 
 def main():
     all_threads = []
     seen_ids = set()
-    for page in range(PAGE_COUNT):
+    page = 0
+    while True:
         offset = page * PAGE_SIZE
         items = get_data(offset)
         print(f'Page {page + 1}: received {len(items)} threads')
         if not items:
             break
 
+        added = 0
         for item in items:
             if item['id'] not in seen_ids:
                 seen_ids.add(item['id'])
                 all_threads.append(item)
+                added += 1
+        if added == 0:
+            raise RuntimeError('The API returned a duplicate page; stopping the crawl.')
+        if len(items) < PAGE_SIZE:
+            break
 
-        if page + 1 < PAGE_COUNT:
-            time.sleep(1)
+        page += 1
+        time.sleep(1)
 
     if not all_threads:
         print('No threads were retrieved. The existing CSV was not changed.')
@@ -100,6 +101,24 @@ def main():
 
     save_csv(all_threads)
     print(f'Saved {len(all_threads)} threads to {CSV_PATH}')
+
+
+# ai
+    now = datetime.now(timezone.utc)
+    for days in FILTER_DAYS:
+        cutoff = now - timedelta(days=days)
+        recent_threads = []
+        for item in all_threads:
+            try:
+                created_at = datetime.fromisoformat(item['created_at'].replace('Z', '+00:00'))
+            except (KeyError, TypeError, ValueError):
+                continue
+            if created_at.tzinfo and cutoff <= created_at.astimezone(timezone.utc) <= now:
+                recent_threads.append(item)
+
+        recent_path = CSV_PATH.with_name(f'threads_{days}d.csv')
+        save_csv(recent_threads, recent_path)
+        print(f'Saved {len(recent_threads)} threads from the last {days} days to {recent_path}')
 
 
 if __name__ == '__main__':
