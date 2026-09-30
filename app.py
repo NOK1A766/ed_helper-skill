@@ -10,7 +10,6 @@ from data_collection import PAGE_SIZE, get_data
 
 
 CSV_PATH = Path(__file__).with_name('threads.csv')
-SAMPLE_PATH = Path(__file__).parent / 'examples' / 'sample_threads.csv'
 REQUIRED_COLUMNS = (
     'Thread number', 'Thread title', 'Thread time', 'Thread category',
     'Thread subcategory', 'View count', 'Like count', 'Star count',
@@ -92,27 +91,114 @@ def ranking_figure(threads, metric, top_n):
     return fig
 
 
+def select_source(source):
+    st.session_state['data_source'] = source
+
+
+def show_guide():
+    st.caption('GETTING STARTED')
+    st.title('Ed Discussion Dashboard')
+    st.write(
+        'Load your course discussions, explore the most active threads, '
+        'and find questions that still need an answer.'
+    )
+
+    st.subheader('1. Choose how to load your data')
+    st.write('Pick the path that matches what you already have.')
+    csv_col, ed_col = st.columns(2)
+    with csv_col, st.container(border=True):
+        st.markdown('**I have a CSV file**')
+        st.caption('Upload a threads CSV exported from this dashboard or the collection script.')
+        st.button('Upload CSV →', on_click=select_source, args=('Upload CSV',))
+    with ed_col, st.container(border=True):
+        st.markdown('**I have Ed access**')
+        st.caption('Enter your course ID and your own Ed API token to fetch threads.')
+        st.button('Fetch from Ed →', on_click=select_source, args=('Fetch from Ed',))
+    if CSV_PATH.exists():
+        st.caption('Already saved threads.csv in this folder? Select Local threads.csv in the sidebar.')
+
+    st.subheader('2. Check the input')
+    st.write('The dashboard checks your data before showing charts. Keep your token private.')
+    id_col, format_col = st.columns(2)
+    with id_col:
+        st.markdown('**Course ID**')
+        st.caption('The number after /courses/ in your Ed course URL. Use a course you can access.')
+    with format_col:
+        st.markdown('**CSV format**')
+        st.caption('Use the column headers shown in examples/sample_threads.csv.')
+    with st.expander('Required CSV columns'):
+        st.write(', '.join(REQUIRED_COLUMNS))
+        st.caption('Thread time should contain a date and time. Count columns should contain numbers.')
+
+    st.subheader('3. Explore and save results')
+    st.write(
+        'Once data is loaded, use the sidebar to choose a time range, ranking metric, '
+        'subcategory, and answer status. The chart ranks the top threads; the table '
+        'shows the matching discussions and links back to Ed.'
+    )
+    st.write(
+        'After fetching from Ed, select **Download fetched CSV** to save a copy. '
+        'The fetched data otherwise stays in this browser session.'
+    )
+
+    st.divider()
+    st.subheader('If something goes wrong')
+    st.markdown(
+        '- **Ed returns HTTP 401 or 403:** Check your token and course access.\n'
+        '- **CSV columns are missing:** Compare the headers with `examples/sample_threads.csv`.\n'
+        '- **No threads match the filters:** Change **Time range** to **All**.\n'
+        '- **Connection error:** Check your network and try again.'
+    )
+
+
+def show_ed_setup_guide():
+    st.subheader('Connect your Ed course')
+
+    st.markdown('**1. Find your course ID**')
+    st.write(
+        'Open your course in Ed Discussion and look at the browser address. '
+        'The course ID is the number immediately after `/courses/`.'
+    )
+    st.code('https://edstem.org/au/courses/36385/discussion/3516589', language=None)
+    st.write(
+        'In this example, **36385** is the course ID. The number after '
+        '`/discussion/` is a thread ID; do not enter that number.'
+    )
+
+    st.markdown('**2. Create an API token**')
+    st.write(
+        'In Ed, open **Settings → API Tokens**, then select **Create Token**. '
+        'Copy the token and paste it into the **Ed API token** field on the left. '
+        'Treat the token like a password and do not share or commit it to GitHub.'
+    )
+
+    st.markdown('**3. Fetch your threads**')
+    st.write(
+        'Enter the course ID and API token in the sidebar, then click '
+        '**Fetch course**. You do not need to edit the code or create a '
+        'configuration file to use this page.'
+    )
+
+
 def main():
     st.set_page_config(page_title='Ed Discussion Dashboard', layout='wide')
-    st.title('Ed Discussion Dashboard')
 
-    sources = ['Sample data', 'Upload CSV', 'Fetch from Ed']
+    sources = ['Getting started', 'Upload CSV', 'Fetch from Ed']
     if CSV_PATH.exists():
-        sources.insert(1, 'Local threads.csv')
-    source = st.sidebar.radio('Data source', sources)
-    if source == 'Sample data':
-        threads = pd.read_csv(SAMPLE_PATH)
-        # Keep the example useful for the relative date filters in future years.
-        now = pd.Timestamp.now(tz='UTC')
-        threads['Thread time'] = [(now - pd.Timedelta(days=i)).isoformat() for i in range(len(threads))]
-        st.caption('Fictional example data. Choose another source to view your course.')
-    elif source == 'Local threads.csv':
+        sources.append('Local threads.csv')
+    source = st.sidebar.radio('Data source', sources, key='data_source')
+    if source == 'Getting started':
+        show_guide()
+        return
+
+    st.title('Ed Discussion Dashboard')
+    if source == 'Local threads.csv':
         threads = pd.read_csv(CSV_PATH)
         st.caption(f'Data source: {CSV_PATH.name}')
     elif source == 'Upload CSV':
         uploaded = st.sidebar.file_uploader('Choose a threads CSV', type='csv')
         if uploaded is None:
-            st.info('Upload a CSV created by data_collection.py or with the same columns as the sample.')
+            st.info('Upload a CSV created by data_collection.py or with the columns shown in examples/sample_threads.csv.')
             st.stop()
         try:
             threads = pd.read_csv(uploaded)
@@ -145,10 +231,12 @@ def main():
                 except requests.RequestException:
                     st.error('Could not reach Ed. Check the network connection.')
         if 'course_threads' not in st.session_state:
-            st.info('Enter a course ID and API token, then select Fetch course.')
+            show_ed_setup_guide()
             st.stop()
         threads = st.session_state['course_threads'].copy()
         st.caption('Data source: Ed API (this browser session)')
+        with st.expander('How to find your course ID and API token'):
+            show_ed_setup_guide()
         st.download_button(
             'Download fetched CSV', threads.to_csv(index=False).encode('utf-8-sig'),
             file_name='threads.csv', mime='text/csv',
