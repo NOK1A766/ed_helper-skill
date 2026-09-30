@@ -1,17 +1,18 @@
-import os
+import argparse
 import csv
+import os
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-import requests
-import time
 
-COURSE_ID = 36387
+import requests
+
 PAGE_SIZE = 30
 FILTER_DAYS = (7, 14, 30)
 CSV_PATH = Path(__file__).with_name('threads.csv')
 
 
-def get_data(offset, course_id=COURSE_ID, api_token=None):
+def get_data(offset, course_id, api_token=None):
     if api_token is None:
         api_token = os.getenv('ED_API_TOKEN')
     if not api_token:
@@ -29,7 +30,7 @@ def get_data(offset, course_id=COURSE_ID, api_token=None):
     url = f'https://edstem.org/api/courses/{course_id}/threads'
     response = requests.get(url=url, headers=headers, params=params, timeout=20)
     response.raise_for_status()
-    threads = response.json()['threads']
+    threads = response.json().get('threads')
     if not isinstance(threads, list):
         raise ValueError('The Ed API response does not contain a list of threads.')
     return threads
@@ -44,7 +45,8 @@ def init_csv(writer):
     ])
 
 
-def save_csv(all_threads, path=CSV_PATH):
+def save_csv(all_threads, course_id, path=CSV_PATH):
+    path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, 'w', encoding='utf-8', newline='') as file:
         writer = csv.writer(file)
         init_csv(writer)
@@ -63,7 +65,7 @@ def save_csv(all_threads, path=CSV_PATH):
             is_answered = item.get('is_answered', False)
             created_time = item.get('created_at', '')
             updated_time = item.get('updated_at', '')
-            detail_url = f'https://edstem.org/au/courses/{COURSE_ID}/discussion/{tid}'
+            detail_url = f'https://edstem.org/au/courses/{course_id}/discussion/{tid}'
 
             writer.writerow([
                 tid, thread_number, thread_type, title, document, category, subcategory,
@@ -72,12 +74,26 @@ def save_csv(all_threads, path=CSV_PATH):
             ])
 
 
-def main():
+def main(argv=None):
+    parser = argparse.ArgumentParser(description='Download Ed Discussion threads to CSV.')
+    parser.add_argument('--course-id', type=int, required=True, help='Numeric Ed course ID')
+    parser.add_argument('--output', type=Path, default=CSV_PATH, help='Output CSV path (default: threads.csv)')
+    args = parser.parse_args(argv)
+    if args.course_id < 1:
+        parser.error('--course-id must be a positive number')
+    if not os.getenv('ED_API_TOKEN'):
+        parser.error('set the ED_API_TOKEN environment variable first')
+
     all_threads = []
     page = 0
     while True:
         offset = page * PAGE_SIZE
-        items = get_data(offset)
+        try:
+            items = get_data(offset, course_id=args.course_id)
+        except requests.HTTPError as error:
+            parser.exit(1, f'Ed returned HTTP {error.response.status_code}. Check the token and course access.\n')
+        except requests.RequestException as error:
+            parser.exit(1, f'Could not reach Ed: {error}\n')
         print(f'Page {page + 1}: received {len(items)} threads')
         if not items:
             break
@@ -93,11 +109,10 @@ def main():
         print('No threads were retrieved. The existing CSV was not changed.')
         return
 
-    save_csv(all_threads)
-    print(f'Saved {len(all_threads)} threads to {CSV_PATH}')
+    save_csv(all_threads, args.course_id, args.output)
+    print(f'Saved {len(all_threads)} threads to {args.output}')
 
 
-# ai
     now = datetime.now(timezone.utc)
     for days in FILTER_DAYS:
         cutoff = now - timedelta(days=days)
@@ -110,8 +125,8 @@ def main():
             if created_at.tzinfo and cutoff <= created_at.astimezone(timezone.utc) <= now:
                 recent_threads.append(item)
 
-        recent_path = CSV_PATH.with_name(f'threads_{days}d.csv')
-        save_csv(recent_threads, recent_path)
+        recent_path = args.output.with_name(f'{args.output.stem}_{days}d.csv')
+        save_csv(recent_threads, args.course_id, recent_path)
         print(f'Saved {len(recent_threads)} threads from the last {days} days to {recent_path}')
 
 

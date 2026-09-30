@@ -10,6 +10,12 @@ from data_collection import PAGE_SIZE, get_data
 
 
 CSV_PATH = Path(__file__).with_name('threads.csv')
+SAMPLE_PATH = Path(__file__).parent / 'examples' / 'sample_threads.csv'
+REQUIRED_COLUMNS = (
+    'Thread number', 'Thread title', 'Thread time', 'Thread category',
+    'Thread subcategory', 'View count', 'Like count', 'Star count',
+    'Reply number', 'Is answer resolved', 'Thread url', 'Thread content',
+)
 METRICS = {
     'Views': 'View count',
     'Likes': 'Like count',
@@ -66,7 +72,7 @@ def ranking_figure(threads, metric, top_n):
         if len(title) > 40:
             title = title[:37] + '...'
         posted_date = str(item['Thread time'])[:10]
-        labels.append(f"{title} (#{int(item['Thread number'])}) — {posted_date}")
+        labels.append(f"{title} (#{item['Thread number']}) — {posted_date}")
         values.append(item[metric])
         answered = item['_answered']
         colors.append(ANSWERED_COLOR if answered else UNANSWERED_COLOR)
@@ -90,16 +96,33 @@ def main():
     st.set_page_config(page_title='Ed Discussion Dashboard', layout='wide')
     st.title('Ed Discussion Dashboard')
 
-    source = st.sidebar.radio('Data source', ['Existing CSV', 'Fetch from Ed'])
-    if source == 'Existing CSV':
-        if not CSV_PATH.exists():
-            st.info('No threads.csv found. Choose "Fetch from Ed" to load a course.')
-            st.stop()
+    sources = ['Sample data', 'Upload CSV', 'Fetch from Ed']
+    if CSV_PATH.exists():
+        sources.insert(1, 'Local threads.csv')
+    source = st.sidebar.radio('Data source', sources)
+    if source == 'Sample data':
+        threads = pd.read_csv(SAMPLE_PATH)
+        # Keep the example useful for the relative date filters in future years.
+        now = pd.Timestamp.now(tz='UTC')
+        threads['Thread time'] = [(now - pd.Timedelta(days=i)).isoformat() for i in range(len(threads))]
+        st.caption('Fictional example data. Choose another source to view your course.')
+    elif source == 'Local threads.csv':
         threads = pd.read_csv(CSV_PATH)
         st.caption(f'Data source: {CSV_PATH.name}')
+    elif source == 'Upload CSV':
+        uploaded = st.sidebar.file_uploader('Choose a threads CSV', type='csv')
+        if uploaded is None:
+            st.info('Upload a CSV created by data_collection.py or with the same columns as the sample.')
+            st.stop()
+        try:
+            threads = pd.read_csv(uploaded)
+        except (pd.errors.ParserError, UnicodeDecodeError, ValueError) as error:
+            st.error(f'Could not read the CSV: {error}')
+            st.stop()
+        st.caption(f'Data source: {uploaded.name}')
     else:
         with st.sidebar.form('ed_fetch', clear_on_submit=True, enter_to_submit=False):
-            course_id = st.text_input('Course ID', value='36387').strip()
+            course_id = st.text_input('Course ID').strip()
             token = st.text_input('Ed API token', type='password', autocomplete='off')
             submitted = st.form_submit_button('Fetch course')
         if submitted:
@@ -126,6 +149,15 @@ def main():
             st.stop()
         threads = st.session_state['course_threads'].copy()
         st.caption('Data source: Ed API (this browser session)')
+        st.download_button(
+            'Download fetched CSV', threads.to_csv(index=False).encode('utf-8-sig'),
+            file_name='threads.csv', mime='text/csv',
+        )
+
+    missing = [column for column in REQUIRED_COLUMNS if column not in threads.columns]
+    if missing:
+        st.error('The CSV is missing columns: ' + ', '.join(missing))
+        st.stop()
 
     threads['_answered'] = (
         threads['Is answer resolved'].astype(str).str.lower() == 'true'
