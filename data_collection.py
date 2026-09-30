@@ -36,7 +36,7 @@ def get_data(offset):
 
 def init_csv(writer):
     writer.writerow([
-        'Thread id', 'Thread type', 'Thread title', 'Thread content',
+        'Thread id', 'Thread number', 'Thread type', 'Thread title', 'Thread content',
         'Thread category', 'Thread subcategory', 'View count', 'Like count',
         'Star count', 'Reply number', 'Is answer resolved',
         'Thread time', 'Updated time', 'Thread url',
@@ -49,6 +49,7 @@ def save_csv(all_threads, path=CSV_PATH):
         init_csv(writer)
         for item in all_threads:
             tid = item['id']
+            thread_number = item['number']
             thread_type = item.get('type', '')
             title = item.get('title', '')
             document = item.get('document', '')
@@ -64,7 +65,7 @@ def save_csv(all_threads, path=CSV_PATH):
             detail_url = f'https://edstem.org/au/courses/{COURSE_ID}/discussion/{tid}'
 
             writer.writerow([
-                tid, thread_type, title, document, category, subcategory,
+                tid, thread_number, thread_type, title, document, category, subcategory,
                 view_count, vote_count, star_count, reply_count, is_answered,
                 created_time, updated_time, detail_url,
             ])
