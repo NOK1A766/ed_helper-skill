@@ -11,8 +11,9 @@ FILTER_DAYS = (7, 14, 30)
 CSV_PATH = Path(__file__).with_name('threads.csv')
 
 
-def get_data(offset):
-    api_token = os.getenv('ED_API_TOKEN')
+def get_data(offset, course_id=COURSE_ID, api_token=None):
+    if api_token is None:
+        api_token = os.getenv('ED_API_TOKEN')
     if not api_token:
         raise RuntimeError('Set the ED_API_TOKEN environment variable before running the script.')
 
@@ -25,7 +26,7 @@ def get_data(offset):
         'offset': offset,
         'sort': 'new',
     }
-    url = f'https://edstem.org/api/courses/{COURSE_ID}/threads'
+    url = f'https://edstem.org/api/courses/{course_id}/threads'
     response = requests.get(url=url, headers=headers, params=params, timeout=20)
     response.raise_for_status()
     threads = response.json()['threads']
