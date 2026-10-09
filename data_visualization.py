@@ -55,7 +55,7 @@ def main(argv=None):
     parser.add_argument('--output-dir', type=Path, default=Path(__file__).parent, help='Directory for PNG charts')
     args = parser.parse_args(argv)
     if not args.input.is_file():
-        parser.error(f'CSV not found: {args.input}. Fetch data or use --input examples/sample_threads.csv')
+        parser.error(f'CSV not found: {args.input}. Fetch data or pass an existing CSV with --input')
     with open(args.input, encoding='utf-8-sig', newline='') as file:
         rows = list(csv.DictReader(file))
     if not rows:

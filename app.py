@@ -125,7 +125,7 @@ def show_guide():
         st.caption('The number after /courses/ in your Ed course URL. Use a course you can access.')
     with format_col:
         st.markdown('**CSV format**')
-        st.caption('Use the column headers shown in examples/sample_threads.csv.')
+        st.caption('Use a CSV exported by this dashboard or the collection script.')
     with st.expander('Required CSV columns'):
         st.write(', '.join(REQUIRED_COLUMNS))
         st.caption('Thread time should contain a date and time. Count columns should contain numbers.')
@@ -145,7 +145,7 @@ def show_guide():
     st.subheader('If something goes wrong')
     st.markdown(
         '- **Ed returns HTTP 401 or 403:** Check your token and course access.\n'
-        '- **CSV columns are missing:** Compare the headers with `examples/sample_threads.csv`.\n'
+        '- **CSV columns are missing:** Compare the headers with the required CSV columns above.\n'
         '- **No threads match the filters:** Change **Time range** to **All**.\n'
         '- **Connection error:** Check your network and try again.'
     )
@@ -198,7 +198,7 @@ def main():
     elif source == 'Upload CSV':
         uploaded = st.sidebar.file_uploader('Choose a threads CSV', type='csv')
         if uploaded is None:
-            st.info('Upload a CSV created by data_collection.py or with the columns shown in examples/sample_threads.csv.')
+            st.info('Upload a CSV exported by this dashboard or created by data_collection.py.')
             st.stop()
         try:
             threads = pd.read_csv(uploaded)

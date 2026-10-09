@@ -1,20 +1,8 @@
 # Ed Discussion Dashboard
 
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/NOK1A766/python-scrapper)
-
 Explore Ed Discussion course threads by views, likes, replies, and answered status. The dashboard opens with a **Getting started** guide, so you can see how to load and explore your own data before entering any credentials.
 
 ## Quick start
-
-### No Python installed: use GitHub Codespaces
-
-You need a GitHub account, but you do not need to install Python on your computer.
-
-1. Click **Open in GitHub Codespaces** above and create a codespace. If you downloaded a ZIP file, open this repository on GitHub to use the button.
-2. Wait for the codespace to start. The `.devcontainer/devcontainer.json` configuration installs the dependencies and starts the dashboard automatically.
-3. Port **8501** should open in your browser. If it does not, open the **Ports** panel, right-click port 8501, and select **Open in Browser**. Follow the **Getting started** guide.
-
-Stop the codespace when you are done. The dashboard starts again when you reopen it.
 
 ### Windows: double-click to start
 
@@ -44,7 +32,7 @@ The **Data source** menu in the sidebar offers these options:
 | Option | What it does |
 | --- | --- |
 | Getting started | Explains how to load data, use the filters, and resolve common errors |
-| Upload CSV | Loads an existing discussion CSV with the columns shown in `examples/sample_threads.csv` |
+| Upload CSV | Loads a discussion CSV exported by this dashboard or the collection script |
 | Fetch from Ed | Fetches a course you can access using its numeric course ID and your Ed API token; lets you download the resulting CSV |
 | Local threads.csv | Appears when `threads.csv` exists in the project directory; useful after running the collection script |
 
@@ -70,11 +58,11 @@ python data_collection.py --course-id 12345
 python data_visualization.py
 ```
 
-By default, `data_collection.py` creates `threads.csv` plus CSV files for the last 7, 14, and 30 days. Use `--output path/to/file.csv` to change the output location. `data_visualization.py` reads `threads.csv` and creates top-15 charts for views, replies, and likes. Use `--input examples/sample_threads.csv` to try it with the sample data or `--output-dir` to choose an image directory. Both scripts support `--help`.
+By default, `data_collection.py` creates `threads.csv` plus CSV files for the last 7, 14, and 30 days. Use `--output path/to/file.csv` to change the output location. `data_visualization.py` reads `threads.csv` and creates top-15 charts for views, replies, and likes. Use `--input path/to/file.csv` to analyze an existing CSV or `--output-dir` to choose an image directory. Both scripts support `--help`.
 
 ## Troubleshooting
 
-- **Python is not found:** Install Python and open a new terminal. On Windows, you can also use the Codespaces option above.
+- **Python is not found:** Install Python and open a new terminal or File Explorer window.
 - **Package installation fails:** Check your internet connection and run `start.bat` again. If your school or workplace blocks PyPI, use a network that allows access.
 - **Ed returns HTTP 401 or 403:** Check your token, course ID, and account access to the course.
 - **The dashboard shows the guide:** Select **Upload CSV** or **Fetch from Ed** in the sidebar, or generate `threads.csv` in the project directory with the command-line script.

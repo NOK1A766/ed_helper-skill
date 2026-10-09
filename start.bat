@@ -18,7 +18,7 @@ if not defined PYTHON_CMD (
 if not defined PYTHON_CMD (
     echo Python 3.10 or newer was not found.
     echo Install Python from https://www.python.org/downloads/windows/
-    echo Then reopen this file. Or use GitHub Codespaces as described in README.md.
+    echo Then reopen this file.
     pause
     exit /b 1
 )
