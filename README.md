@@ -4,6 +4,20 @@ Explore Ed Discussion course threads by views, likes, replies, and answered stat
 
 ## Quick start
 
+### Codex desktop: open the dashboard from chat
+
+In a local Codex chat for this repository, ask to open the Ed Discussion dashboard.
+The `ed-helper` skill starts the local Streamlit server and returns its clickable
+`localhost` URL. Use the dashboard to upload a CSV or fetch a course, then ask
+questions about the data in the same Codex chat. The dashboard saves the active
+dataset under `.local/ed-discussion/`, which Git ignores. Existing `threads.csv`
+is also available as a local source.
+
+For an Ed fetch, enter the numeric course ID and your own API token in the
+dashboard sidebar's **Ed API token** password field, then click **Fetch course**.
+Do not paste the token into chat. The token is used for the Ed request and is not
+written to the saved CSV or metadata.
+
 ### Windows: double-click to start
 
 1. If Python is not installed, install Python 3.10 or newer from the [official Python website](https://www.python.org/downloads/windows/). After installation, reopen your terminal or File Explorer window.

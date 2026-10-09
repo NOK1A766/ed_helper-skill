@@ -7,14 +7,11 @@ import requests
 import streamlit as st
 
 from data_collection import PAGE_SIZE, get_data
+from ed_discussion.analysis import filter_threads
+from ed_discussion.store import REQUIRED_COLUMNS, save_dataset, save_view
 
 
 CSV_PATH = Path(__file__).with_name('threads.csv')
-REQUIRED_COLUMNS = (
-    'Thread number', 'Thread title', 'Thread time', 'Thread category',
-    'Thread subcategory', 'View count', 'Like count', 'Star count',
-    'Reply number', 'Is answer resolved', 'Thread url', 'Thread content',
-)
 METRICS = {
     'Views': 'View count',
     'Likes': 'Like count',
@@ -93,6 +90,12 @@ def ranking_figure(threads, metric, top_n):
 
 def select_source(source):
     st.session_state['data_source'] = source
+    reset_filters()
+
+
+def reset_filters():
+    for key in ('time_range', 'rank_by', 'top_threads', 'subcategory', 'answer_status'):
+        st.session_state.pop(key, None)
 
 
 def show_guide():
@@ -138,7 +141,7 @@ def show_guide():
     )
     st.write(
         'After fetching from Ed, select **Download fetched CSV** to save a copy. '
-        'The fetched data otherwise stays in this browser session.'
+        'The dashboard also saves the current dataset locally for Codex chat.'
     )
 
     st.divider()
@@ -186,7 +189,8 @@ def main():
     sources = ['Getting started', 'Upload CSV', 'Fetch from Ed']
     if CSV_PATH.exists():
         sources.append('Local threads.csv')
-    source = st.sidebar.radio('Data source', sources, key='data_source')
+    source = st.sidebar.radio('Data source', sources, key='data_source',
+                              on_change=reset_filters)
     if source == 'Getting started':
         show_guide()
         return
@@ -194,6 +198,7 @@ def main():
     st.title('Ed Discussion Dashboard')
     if source == 'Local threads.csv':
         threads = pd.read_csv(CSV_PATH)
+        source_type, source_name, source_course_id = 'local', CSV_PATH.name, None
         st.caption(f'Data source: {CSV_PATH.name}')
     elif source == 'Upload CSV':
         uploaded = st.sidebar.file_uploader('Choose a threads CSV', type='csv')
@@ -205,6 +210,7 @@ def main():
         except (pd.errors.ParserError, UnicodeDecodeError, ValueError) as error:
             st.error(f'Could not read the CSV: {error}')
             st.stop()
+        source_type, source_name, source_course_id = 'upload', uploaded.name, None
         st.caption(f'Data source: {uploaded.name}')
     else:
         with st.sidebar.form('ed_fetch', clear_on_submit=True, enter_to_submit=False):
@@ -223,6 +229,7 @@ def main():
                         items = fetch_course(course_id, token)
                     if items:
                         st.session_state['course_threads'] = threads_to_table(items, course_id)
+                        st.session_state['course_id'] = course_id
                         st.success(f'Loaded {len(items)} threads from course {course_id}.')
                     else:
                         st.warning('No threads were found in this course.')
@@ -234,7 +241,10 @@ def main():
             show_ed_setup_guide()
             st.stop()
         threads = st.session_state['course_threads'].copy()
-        st.caption('Data source: Ed API (this browser session)')
+        source_type = 'ed'
+        source_name = None
+        source_course_id = st.session_state.get('course_id')
+        st.caption('Data source: Ed API (saved locally for Codex chat)')
         with st.expander('How to find your course ID and API token'):
             show_ed_setup_guide()
         st.download_button(
@@ -247,27 +257,34 @@ def main():
         st.error('The CSV is missing columns: ' + ', '.join(missing))
         st.stop()
 
-    threads['_answered'] = (
-        threads['Is answer resolved'].astype(str).str.lower() == 'true'
-    )
-    threads['_posted_at'] = pd.to_datetime(threads['Thread time'], utc=True, errors='coerce')
-    threads['Thread subcategory'] = threads['Thread subcategory'].fillna('Uncategorized')
+    if threads.empty:
+        st.info('The CSV contains no threads.')
+        st.stop()
+    try:
+        metadata = save_dataset(threads, source_type, filename=source_name,
+                                course_id=source_course_id)
+    except OSError as error:
+        st.error(f'Could not save the current dataset: {error}')
+        st.stop()
 
-    period = st.sidebar.selectbox('Time range', ['All', 'Last 7 days', 'Last 14 days', 'Last 30 days'])
-    metric_name = st.sidebar.selectbox('Rank by', list(METRICS))
-    top_n = st.sidebar.selectbox('Top threads', [10, 15], index=1)
+    threads = filter_threads(threads)
+
+    period = st.sidebar.selectbox('Time range', ['All', 'Last 7 days', 'Last 14 days', 'Last 30 days'],
+                                  key='time_range')
+    metric_name = st.sidebar.selectbox('Rank by', list(METRICS), key='rank_by')
+    top_n = st.sidebar.selectbox('Top threads', [10, 15], index=1, key='top_threads')
     subcategories = ['All'] + sorted(threads['Thread subcategory'].unique().tolist())
-    subcategory = st.sidebar.selectbox('Subcategory', subcategories)
-    answer_status = st.sidebar.selectbox('Answer status', ['All', 'Answered', 'Unanswered'])
+    subcategory = st.sidebar.selectbox('Subcategory', subcategories, key='subcategory')
+    answer_status = st.sidebar.selectbox('Answer status', ['All', 'Answered', 'Unanswered'],
+                                         key='answer_status')
 
-    filtered = threads.copy()
-    if period != 'All':
-        days = int(period.split()[1])
-        filtered = filtered[filtered['_posted_at'] >= pd.Timestamp.now(tz='UTC') - pd.Timedelta(days=days)]
-    if subcategory != 'All':
-        filtered = filtered[filtered['Thread subcategory'] == subcategory]
-    if answer_status != 'All':
-        filtered = filtered[filtered['_answered'] == (answer_status == 'Answered')]
+    filters = {
+        'days': None if period == 'All' else int(period.split()[1]),
+        'subcategory': None if subcategory == 'All' else subcategory,
+        'status': answer_status.lower(),
+    }
+    filtered = filter_threads(threads, **filters)
+    save_view(filters, metadata['sha256'])
 
     metric = METRICS[metric_name]
     filtered[metric] = pd.to_numeric(filtered[metric], errors='coerce').fillna(0)
